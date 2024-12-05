@@ -2,6 +2,9 @@ import os
 from database import Database
 from flask import Flask, jsonify
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
