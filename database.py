@@ -1,3 +1,4 @@
+import os
 import pymysql
 
 class Database:
@@ -6,7 +7,7 @@ class Database:
 
     def connect(self):
         self.db = pymysql.connect(
-            host="54.211.167.209",
+            host=os.environ["DB_HOST"],
             user="macon",
             password="a6GHsb6aj",
             database="macon",

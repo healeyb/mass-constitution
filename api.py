@@ -1,3 +1,4 @@
+import os
 from database import Database
 from flask import Flask, jsonify
 
@@ -38,4 +39,4 @@ def all_blocks():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=82)
+    app.run(host="0.0.0.0", port=os.environ["API_PORT"])
