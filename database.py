@@ -1,18 +1,19 @@
-import mysql.connector
+import pymysql
 
 class Database:
     def __init__(self):
         self.connect()
 
     def connect(self):
-        self.db = mysql.connector.connect(
-            host="127.0.0.1",
+        self.db = pymysql.connect(
+            host="54.211.167.209",
             user="macon",
             password="a6GHsb6aj",
             database="macon",
         )
 
-        self.cursor = self.db.cursor()
+        if self.db.open:
+            self.cursor = self.db.cursor()
 
     def disconnect(self):
         self.cursor.close()
