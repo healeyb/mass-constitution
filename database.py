@@ -14,6 +14,7 @@ class Database:
             user=os.environ["DB_USER"],
             password=os.environ["DB_PASS"],
             database="macon",
+            cursorclass=pymysql.cursors.DictCursor,
         )
 
         if self.db.open:

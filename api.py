@@ -1,44 +1,97 @@
 import os
+import json
 from database import Database
-from flask import Flask, jsonify
+from flask import Flask, make_response
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
 app = Flask(__name__)
-app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
-
 db = Database()
+
+def jsonify(output, status=200, indent=4, sort_keys=True):
+    response = make_response(json.dumps(output, indent=indent, sort_keys=sort_keys))
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    response.headers['mimetype'] = 'application/json'
+    response.status_code = status
+    return response
 
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
         "status": "OK",
         "message": "API is operational"
-    })
+    }, status=200)
 
-@app.route('/all', methods=['GET'])
-def all_blocks():
+@app.route('/', methods=['GET'])
+def search():
     data = db.select_all(
-        """SELECT block_id, category, chapter, section, article, segment, content
-           FROM blocks;"""
+        """SELECT b.block_id, b.category, b.chapter, b.section, b.article, b.segment, 
+              b.original, COALESCE(b.current, b.original) AS current, b.amendments, b.is_active,
+              catm.subtitle AS category_subtitle, 
+              chm.subtitle AS chapter_subtitle, 
+              sm.subtitle AS section_subtitle,
+              am.ratified AS amendment_ratified
+           FROM blocks b
+              LEFT JOIN category_metadata catm USING (category)
+              LEFT JOIN chapter_metadata chm ON (
+                 chm.category = b.category AND 
+                 chm.chapter = b.chapter
+              )
+              LEFT JOIN section_metadata sm ON (
+                 sm.category = b.category AND 
+                 sm.chapter = b.chapter AND 
+                 sm.section = b.section
+              )
+              LEFT JOIN amendment_metadata am ON (
+                 b.category = 'amendment' AND 
+                 am.article = b.article
+              );"""
     )
 
+    output = []
     if data:
-        output = []
         for block in data:
+            chapter_block = None
+            if block['chapter']:
+                chapter_block = {
+                    "number": block['chapter'],
+                    "subtitle": block['chapter_subtitle'],
+                }
+
+            section_block = None
+            if block['section']:
+                section_block = {
+                    "number": block['section'],
+                    "subtitle": block['section_subtitle'],
+                }
+
+            metadata = {
+                "active": True if block['is_active'] else False,
+                "category": {
+                    "name": block['category'].replace("_", " ").title(),
+                    "subtitle": block['category_subtitle'],
+                },
+                "chapter": chapter_block,
+                "section": section_block,
+                "article": block['article'],
+                "segment_idx": block['segment'],
+                "amendments": json.loads(block['amendments']) if block['amendments'] else None,
+            }
+
+            if block['amendment_ratified']:
+                metadata["ratified"] = block['amendment_ratified']
+
             output.append({
-                "block_id": block[0],
-                "category": block[1],
-                "chapter": block[2],
-                "section": block[3],
-                "article": block[4],
-                "segment": block[5],
-                "content": block[6],
+                "id": block['block_id'],
+                "metadata": metadata,
+                "text": {
+                    "original": block['original'],
+                    "current": block['current'],
+                }
             })
 
-        return jsonify(output)
-
+    return jsonify(output)
 
 
 if __name__ == '__main__':
