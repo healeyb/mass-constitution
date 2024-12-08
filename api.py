@@ -27,7 +27,8 @@ def status():
 def search():
     data = db.select_all(
         """SELECT b.block_id, b.category, b.chapter, b.section, b.article, b.segment, 
-              b.original, COALESCE(b.current, b.original) AS current, b.amendments, b.is_active,
+              b.text, b.amendments, 
+              b.is_annulled, b.is_amended, b.is_superseded,
               catm.subtitle AS category_subtitle, 
               chm.subtitle AS chapter_subtitle, 
               sm.subtitle AS section_subtitle,
@@ -67,28 +68,29 @@ def search():
                 }
 
             metadata = {
-                "active": True if block['is_active'] else False,
-                "category": {
+                "part": {
                     "name": block['category'].replace("_", " ").title(),
                     "subtitle": block['category_subtitle'],
                 },
                 "chapter": chapter_block,
                 "section": section_block,
                 "article": block['article'],
-                "segment_idx": block['segment'],
-                "amendments": json.loads(block['amendments']) if block['amendments'] else None,
+                "paragraph": block['segment'],
             }
 
             if block['amendment_ratified']:
                 metadata["ratified"] = block['amendment_ratified']
 
             output.append({
-                "id": block['block_id'],
-                "metadata": metadata,
-                "text": {
-                    "original": block['original'],
-                    "current": block['current'],
-                }
+                # "id": block['block_id'],
+                "position": metadata,
+                "text": block['text'],
+                "flags": {
+                    "is_annulled": True if block['is_annulled'] else False,
+                    "is_amended": True if block['is_amended'] else False,
+                    "is_superseded": True if block['is_superseded'] else False,
+                },
+                "changes": json.loads(block['amendments']) if block['amendments'] else None,
             })
 
     return jsonify(output)
