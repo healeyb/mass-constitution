@@ -41,6 +41,11 @@ def compare():
             response.status_code = 400
             return response
 
+        if "malegislature.gov" not in bill_url:
+            response = jsonify(message="Bill URL must point to a PDF hosted by malegislature.gov")
+            response.status_code = 400
+            return response
+
         response = support_service.compare_bill(bill_url=bill_url)
         if response:
             if output == "json":

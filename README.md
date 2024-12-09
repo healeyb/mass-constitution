@@ -1,10 +1,8 @@
 # mass-constitution
 
-sudo apt-get install python3-pymysql
+create: /etc/systemd/system/macon_api.service
 
-sudo apt-get install python3-flask
-
-pip3 install openai requests markdown2 markdown-it-py
+pip3 install openai requests markdown2 markdown-it-py python-dotenv pymysql flask
 
 # reload
 
