@@ -23,5 +23,5 @@ if __name__ == "__main__":
 
         elif args.method == "compare-bill":
             bill_url = args.supplement
-            response = support_service.compare_bill(bill_url)
+            response = support_service.compare_bill(bill_url, redo=True)
             print(response)

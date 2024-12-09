@@ -14,19 +14,20 @@ class SupportService:
         self.db = Database()
 
     def download_pdf(self, url):
-        local_file = "downloaded.pdf"
+        if ".pdf" in url and "/" in url:
+            local_file = url.split("/")[-1]
 
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
 
-        if 'application/pdf' in response.headers.get('Content-Type', ''):
-            with open(local_file, 'wb') as pdf_file:
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        pdf_file.write(chunk)
+            if 'application/pdf' in response.headers.get('Content-Type', ''):
+                with open(local_file, 'wb') as pdf_file:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if chunk:
+                            pdf_file.write(chunk)
 
-        if os.path.exists(local_file):
-            return local_file
+            if os.path.exists(local_file):
+                return local_file
 
     def get_primary_assistant(self):
         sql = """SELECT assistant_id 
@@ -157,8 +158,9 @@ class SupportService:
         if os.path.exists(local_file):
             vector_store = client.beta.vector_stores.create(name="MA Constitution")
             if vector_store:
-                print(vector_store)
-                sql = """UPDATE vector_stores SET is_primary = 0;"""
+                sql = """UPDATE vector_stores 
+                         SET is_primary = 0;"""
+
                 self.db.mutate(sql)
 
                 sql = """INSERT INTO vector_stores (vector_store_id, name, is_primary)
@@ -166,7 +168,7 @@ class SupportService:
 
                 self.db.insert(sql, (vector_store.id, vector_store.name))
 
-                file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+                client.beta.vector_stores.file_batches.upload_and_poll(
                     vector_store_id=vector_store.id,
                     files=[open(local_file, "rb")],
                 )
@@ -183,63 +185,92 @@ class SupportService:
                 tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
             )
 
-    def compare_bill(self, bill_url):
-        sql = """SELECT response 
-                 FROM bill_comparisons
-                 WHERE bill_url = %s;"""
+    def compare_bill(self, bill_url, redo=False):
+        if not redo:
+            sql = """SELECT response 
+                     FROM bill_comparisons
+                     WHERE bill_url = %s;"""
 
-        known_response = self.db.select_all(sql, (bill_url,))
-        if known_response:
-            return known_response[0]['response']
+            known_response = self.db.select_all(sql, (bill_url,))
+            if known_response:
+                return known_response[0]['response']
 
-        vector_store_id = self.get_primary_assistant()
         assistant_id = self.get_primary_vector_store()
 
         local_file = self.download_pdf(bill_url)
         if local_file:
-            message_file = client.files.create(
-                file=open(local_file, "rb"),
-                purpose="assistants",
-            )
+            sql = """SELECT file_id 
+                     FROM assistant_files 
+                     WHERE filename = %s;"""
 
-            thread = client.beta.threads.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Given this attached bill, please determine if the bill is constitutional; and if not, why not?\n\n"
-                            "Please provide your response in 3 sections: Relevant Constitutional Provisions, Analysis of the Bill, and Constitutionality Conclusion."
-                        ),
-                        "attachments": [
+            file_id = self.db.select_one(sql, (local_file,))
+            if file_id:
+                file_id = file_id['file_id']
+
+            else:
+                message_file = client.files.create(
+                    file=open(local_file, "rb"),
+                    purpose="assistants",
+                )
+
+                if message_file:
+                    file_id = message_file.id
+
+                    sql = """INSERT INTO assistant_files (filename, file_id)
+                             VALUES (%s, %s);"""
+
+                    self.db.insert(sql, (local_file, file_id))
+
+            if os.path.exists(local_file):
+                os.remove(local_file)
+
+            if file_id:
+                file_data = client.files.retrieve(file_id)
+                if file_data and file_data.bytes > 0:
+                    thread = client.beta.threads.create(
+                        messages=[
                             {
-                                "file_id": message_file.id,
-                                "tools": [
+                                "role": "user",
+                                "content": (
+                                    "Given the attached bill, please determine if the text of the bill is constitutional; and if not, why is it not?\n\n"
+                                    "Please provide your response in 4 sections: \n"
+                                    "1. Bill Summary, which will summarize what the bill aims to do.\n"
+                                    "2. Relevant Constitutional Provisions, which will be a list of citations for which part, chapter, section, and/or article of the constitution is relevant to the text of this bill.\n"
+                                    "3. Analysis of the Bill, which explains how this bill conforms or does not conform to the relevant constitutional provisions listed.\n"
+                                    "4. Constitutionality Conclusion, which summarizes whether or not the bill is constitutional, and why."
+                                ),
+                                "attachments": [
                                     {
-                                        "type": "file_search",
+                                        "file_id": file_id,
+                                        "tools": [
+                                            {
+                                                "type": "file_search",
+                                            }
+                                        ]
                                     }
-                                ]
+                                ],
                             }
-                        ],
-                    }
-                ]
-            )
+                        ]
+                    )
 
-            run = client.beta.threads.runs.create_and_poll(
-                thread_id=thread.id,
-                assistant_id=assistant_id,
-            )
+                    run = client.beta.threads.runs.create_and_poll(
+                        thread_id=thread.id,
+                        assistant_id=assistant_id,
+                    )
 
-            messages = list(client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id))
-            message_content = messages[0].content[0].text
-            annotations = message_content.annotations
-            for index, annotation in enumerate(annotations):
-                message_content.value = message_content.value.replace(annotation.text, "")
+                    messages = list(client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id))
+                    message_content = messages[0].content[0].text
+                    annotations = message_content.annotations
+                    for index, annotation in enumerate(annotations):
+                        message_content.value = message_content.value.replace(annotation.text, "")
 
-            response = message_content.value
-            if response:
-                sql = """INSERT INTO bill_comparisons (bill_url, response)
-                         VALUES (%s, %s);"""
+                    response = message_content.value
+                    if response:
+                        sql = """INSERT INTO bill_comparisons (bill_url, response)
+                                 VALUES (%s, %s)
+                                 ON DUPLICATE KEY UPDATE 
+                                    response = VALUES(response);"""
 
-                self.db.insert(sql, (bill_url, response))
+                        self.db.insert(sql, (bill_url, response))
 
-                return response
+                        return response

@@ -4,7 +4,7 @@ sudo apt-get install python3-pymysql
 
 sudo apt-get install python3-flask
 
-pip3 install openai requests markdown2
+pip3 install openai requests markdown2 markdown-it-py
 
 # reload
 
