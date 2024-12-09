@@ -36,6 +36,10 @@ def compare():
         bill_url = params["bill_url"]
         output = params["output"] if "output" in params else "json"
 
+        # for this URL type, just append PDF...
+        if ".pdf" not in bill_url and "malegislature.gov" in bill_url:
+            bill_url = f"{bill_url}.pdf"
+
         if ".pdf" not in bill_url:
             response = jsonify(message="Bill URL must point to a PDF document")
             response.status_code = 400
