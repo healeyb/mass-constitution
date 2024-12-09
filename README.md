@@ -4,6 +4,10 @@ sudo apt-get install python3-pymysql
 
 sudo apt-get install python3-flask
 
+pip3 install openai requests markdown2
+
+# reload
+
 sudo systemctl daemon-reload
 
 sudo systemctl stop macon_api.service
