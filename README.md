@@ -2,7 +2,24 @@
 
 create: /etc/systemd/system/macon_api.service
 
-pip3 install openai requests markdown2 markdown-it-py python-dotenv pymysql flask
+```
+[Unit]
+Description=MA Constitution API
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/app
+ExecStart=sudo /app/venv/bin/python /app/mass-constitution/api.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+# install packages
+
+/app/venv/bin/python -m pip install openai requests markdown2 markdown-it-py python-dotenv pymysql flask
 
 # reload
 
